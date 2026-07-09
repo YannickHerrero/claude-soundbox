@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Claude Soundbox — play a random sound from the folder matching Claude Code's state.
+#
+# Usage: play-sound <category>
+#   category: task-done | subagent-done | notification
+# For "notification", the actual folder (approval vs waiting-input) is decided by
+# inspecting the hook's stdin JSON "message" field.
+#
+# The script is intentionally dependency-free (no jq/shuf) and always exits 0 so a
+# missing player or an empty sound folder never surfaces an error to Claude Code.
+
+category="$1"
+
+# Resolve the plugin root from this script's location (bin/..). Prefer the env var
+# Claude Code exports, falling back to path resolution for standalone use.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  plugin_root="$CLAUDE_PLUGIN_ROOT"
+else
+  script_dir="$(cd "$(dirname "$0")" && pwd)"
+  plugin_root="$(cd "$script_dir/.." && pwd)"
+fi
+
+# For notifications, read stdin and route to approval vs waiting-input.
+if [ "$category" = "notification" ]; then
+  stdin_json="$(cat 2>/dev/null)"
+  message="$(printf '%s' "$stdin_json" | grep -o '"message"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n1)"
+  if printf '%s' "$message" | grep -qiE 'permission|approve|allow|wants to use|needs your'; then
+    category="approval"
+  else
+    category="waiting-input"
+  fi
+fi
+
+dir="$plugin_root/sounds/$category"
+[ -d "$dir" ] || exit 0
+
+# Collect audio files (any supported extension), without globbing surprises.
+files=()
+shopt -s nullglob nocaseglob 2>/dev/null
+for f in "$dir"/*.mp3 "$dir"/*.wav "$dir"/*.ogg "$dir"/*.flac "$dir"/*.m4a "$dir"/*.aiff; do
+  files+=("$f")
+done
+shopt -u nullglob nocaseglob 2>/dev/null
+
+# No sounds in this folder -> silent no-op (e.g. folders shipped empty).
+[ "${#files[@]}" -gt 0 ] || exit 0
+
+# Pick one at random ($RANDOM avoids a shuf dependency).
+sound="${files[$((RANDOM % ${#files[@]}))]}"
+
+# Play detached in the background via the first available player, so the hook
+# returns instantly and audio keeps playing.
+play() {
+  if command -v afplay >/dev/null 2>&1; then
+    afplay "$sound"
+  elif command -v paplay >/dev/null 2>&1; then
+    paplay "$sound"
+  elif command -v aplay >/dev/null 2>&1; then
+    aplay -q "$sound"
+  elif command -v ffplay >/dev/null 2>&1; then
+    ffplay -nodisp -autoexit -loglevel quiet "$sound"
+  elif command -v mpg123 >/dev/null 2>&1; then
+    mpg123 -q "$sound"
+  elif command -v play >/dev/null 2>&1; then
+    play -q "$sound"
+  elif command -v powershell.exe >/dev/null 2>&1; then
+    # Windows/WSL fallback. SoundPlayer only handles WAV; other formats are skipped.
+    case "$sound" in
+      *.wav|*.WAV)
+        win_path="$(wslpath -w "$sound" 2>/dev/null || printf '%s' "$sound")"
+        powershell.exe -NoProfile -Command "(New-Object Media.SoundPlayer '$win_path').PlaySync()" >/dev/null 2>&1
+        ;;
+    esac
+  fi
+}
+
+play >/dev/null 2>&1 &
+disown 2>/dev/null
+
+exit 0

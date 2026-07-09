@@ -1,0 +1,12 @@
+{
+  "name": "claude-soundbox",
+  "owner": { "name": "YannickHerrero" },
+  "description": "Sound notifications for Claude Code.",
+  "plugins": [
+    {
+      "name": "claude-soundbox",
+      "source": "./",
+      "description": "Play a random sound depending on Claude Code's state."
+    }
+  ]
+}

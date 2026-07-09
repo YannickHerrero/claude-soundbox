@@ -1,0 +1,11 @@
+{
+  "name": "claude-soundbox",
+  "displayName": "Claude Soundbox",
+  "description": "Play a random sound depending on Claude Code's state (task done, waiting for approval/input, subagent done).",
+  "author": { "name": "YannickHerrero" },
+  "homepage": "https://github.com/YannickHerrero/claude-soundbox",
+  "repository": "https://github.com/YannickHerrero/claude-soundbox",
+  "license": "MIT",
+  "keywords": ["sound", "audio", "notifications", "hooks"],
+  "hooks": "./hooks/hooks.json"
+}
